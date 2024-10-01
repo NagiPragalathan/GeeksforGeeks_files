@@ -1,0 +1,76 @@
+resp = crmAPIRequest;
+parameters = resp.get("body").toString();
+paramPairs = parameters.toList("&");
+for each  pair in paramPairs
+{
+	fieldNames = pair.toList("=");
+	if(fieldNames.get(0) == "action")
+	{
+		eventType = fieldNames.get(1);
+	}
+	else if(fieldNames.get(0) == "id")
+	{
+		appointmentId = fieldNames.get(1);
+	}
+}
+debugVal = zoho.crm.getOrgVariable("acuityscheduling1__debug");
+choosenActivity = zoho.crm.getOrgVariable("acuityscheduling1__activities");
+if(debugVal = "no")
+{
+	debug = false;
+}
+else if(debugVal = "yes")
+{
+	debug = true;
+}
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :zoho.loginuserid
+		subject :"Cancelling"
+		message :"resp : " + resp
+	]
+}
+if(eventType == "appointment.canceled")
+{
+	zEventMap = Map();
+	zEventMap.put("module",choosenActivity);
+	//use just column name
+	if(choosenActivity == "Events")
+	{
+		zEventMap.put("criteria","acuityscheduling1__AcuityID:equals:" + appointmentId);
+	}
+	if(choosenActivity == "Tasks")
+	{
+		zEventMap.put("criteria","acuityscheduling1__AcuityID:equals:" + appointmentId);
+	}
+	zEventResp = zoho.crm.invokeConnector("crm.search",zEventMap);
+	zEventResponse = zEventResp.get("response");
+	info zEventResponse;
+	if(zEventResponse != "")
+	{
+		if(debug)
+		{
+			sendmail
+			[
+				from :zoho.adminuserid
+				to :zoho.loginuserid
+				subject :"zEventResp"
+				message :"zEventResp : " + zEventResp
+			]
+		}
+		exEventMap = zEventResp.get("response").toMap();
+		exEventDataList = exEventMap.get("data").toJSONList();
+		for each  item in exEventDataList
+		{
+			eventId = item.get("id");
+			info eventId;
+		}
+		deleteVar = Map();
+		deleteVar = {"module":choosenActivity,"id":eventId};
+		deleteResp = zoho.crm.invokeConnector("crm.delete",deleteVar);
+	}
+}
+return "Success";
