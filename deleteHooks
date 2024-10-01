@@ -1,0 +1,89 @@
+dynamic_map = Map();
+resp = zoho.crm.invokeConnector("acuityscheduling1.acuityscheduling.getwebhooks0",dynamic_map);
+info resp;
+sendmail
+[
+	from :zoho.adminuserid
+	to :zoho.loginuserid
+	subject :"Response"
+	message :"Response" + resp
+]
+responseJsonList = resp.getJSON("response").toJSONList();
+for each  response in responseJsonList
+{
+	targetURL = response.get("target");
+	if(targetURL.contains("platform.zoho"))
+	{
+		delMap = Map();
+		delMap.put("id",response.get("id"));
+		r = zoho.crm.invokeConnector("acuityscheduling1.acuityscheduling.deletehook",delMap);
+		message = "Duplicate Hooks removed";
+	}
+	else
+	{
+		message = "Nothing to do!";
+	}
+}
+getmap = {"nameSpace":"premk.acuityscheduling1"};
+apiresponse = zoho.crm.invokeConnector("crm.zapikey",getmap);
+zapikey = apiresponse.get("response");
+debugVal = zoho.crm.getOrgVariable("acuityscheduling1__debug");
+if(debugVal = "no")
+{
+	debug = false;
+}
+else if(debugVal = "yes")
+{
+	debug = true;
+}
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :zoho.adminuserid
+		subject :"zapikey"
+		message :"zapikey" + zapikey + "apiresponse " + apiresponse
+	]
+}
+crm_signal_webhook_url = "https://platform.zoho.com/crm/v2/functions/acuityscheduling1.onschedule/actions/execute?auth_type=apikey&zapikey=" + zapikey;
+crm_signal_cancel_webhook_url = "https://platform.zoho.com/crm/v2/functions/acuityscheduling1.oncschedule/actions/execute?auth_type=apikey&zapikey=" + zapikey;
+crm_signal_res_webhook_url = "https://platform.zoho.com/crm/v2/functions/acuityscheduling1.onrschedule/actions/execute?auth_type=apikey&zapikey=" + zapikey;
+scheduledMap = {"triggerEvent":"appointment.scheduled","targetUrl":crm_signal_webhook_url};
+canScheduledMap = {"triggerEvent":"appointment.canceled","targetUrl":crm_signal_cancel_webhook_url};
+resScheduledMap = {"triggerEvent":"appointment.rescheduled","targetUrl":crm_signal_res_webhook_url};
+// for schedule
+response = zoho.crm.invokeConnector("acuityscheduling1.acuityscheduling.createwebhook3",scheduledMap);
+ResponseMap = response.get("response").toMap();
+webhookid = ResponseMap.get("id");
+setResp = zoho.crm.invokeConnector("crm.set",{"apiname":"acuityscheduling1__webhook","value":webhookid});
+// for cancel
+canResponse = zoho.crm.invokeConnector("acuityscheduling1.acuityscheduling.createwebhook3",canScheduledMap);
+canResponseMap = canResponse.get("response").toMap();
+if(response.get("status_code") == '201' || response.get("status_code") == '200')
+{
+	message = message + ", " + "Hooks are created please proceed";
+}
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :zoho.adminuserid
+		subject :"Response on Authorization"
+		message :"response" + response
+	]
+}
+canWebHookId = canResponseMap.get("id");
+setCanResp = zoho.crm.invokeConnector("crm.set",{"apiname":"acuityscheduling1__canwebhook","value":canWebHookId});
+//for reschedule
+resResponse = zoho.crm.invokeConnector("acuityscheduling1.acuityscheduling.createwebhook3",resScheduledMap);
+resResponseMap = resResponse.get("response").toMap();
+resWebHookId = resResponseMap.get("id");
+setResResp = zoho.crm.invokeConnector("crm.set",{"apiname":"acuityscheduling1__reswebhook","value":resWebHookId});
+m = Map();
+linkResponse = zoho.crm.invokeConnector("acuityscheduling1.acuityscheduling.getme",m);
+linkMap = linkResponse.get("response").toMap();
+schedulingPage = linkMap.get("schedulingPage");
+schedulingLink = zoho.crm.invokeConnector("crm.set",{"apiname":"acuityscheduling1__clientURL","value":schedulingPage});
+return message;
