@@ -1,0 +1,157 @@
+resp = crmAPIRequest;
+respBody = resp.get("body");
+// Debugging
+debug = false;
+debugMail = "bhaarat@xtracut.com";
+// API request Mail
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :debugMail
+		subject :"Incoming Request from WebHook Reschedule"
+		message :resp
+	]
+}
+// Get ID and Action Type 
+paramsPairs = respBody.toList("&");
+appointmentId = "";
+actionType = "";
+for each  param in paramsPairs
+{
+	fieldsName = param.toList("=");
+	if(fieldsName.get(0) == "action")
+	{
+		actionType = fieldsName.get(1);
+	}
+	if(fieldsName.get(0) == "id")
+	{
+		appointmentId = fieldsName.get(1);
+	}
+}
+// Get Appoinment Details using Appointment ID
+requestObj = Map();
+requestObj.put("id",appointmentId);
+singleAppointmentResponse = zoho.crm.invokeConnector("acuityscheduling1.acuityscheduling.getsingleappointment",requestObj).toMap();
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :debugMail
+		subject :"Single Appoinment Response"
+		message :singleAppointmentResponse.get("response")
+	]
+}
+singleAppoinmentData = singleAppointmentResponse.get("response");
+// Meeting Time and Duration
+meetingDateTime = singleAppoinmentData.get("datetime");
+duration = singleAppoinmentData.get("duration");
+// Find the tasks or meeting associated with it 
+scheduleFound = false;
+moduleFound = "";
+// Tasks or Meeting
+moduleId = 0;
+// Tasks or Meeting ID
+// Tasks
+allTasksResp = zoho.crm.getRecords("Tasks").toJsonList();
+// Finding Task
+for each  task in allTasksResp
+{
+	tempId = task.getJson("acuityscheduling1__AcuityID");
+	if(tempId == null)
+	{
+		continue;
+	}
+	if(tempId.toNumber() == appointmentId.toNumber())
+	{
+		moduleFound = "Tasks";
+		moduleId = task.getJson("id");
+		scheduleFound = true;
+		break;
+	}
+}
+// Update Task and Stop Execution
+if(scheduleFound)
+{
+	newData = Map();
+	newData.put("Due_Date",meetingDateTime.subString(0,10));
+	// yyyy-MM-dd
+	// Updating Task with new Record
+	updateResp = zoho.crm.updateRecord(moduleFound,moduleId,newData);
+	if(debug)
+	{
+		sendmail
+		[
+			from :zoho.adminuserid
+			to :debugMail
+			subject :"Updated record in Tasks"
+			message :updateResp
+		]
+	}
+	return "Task Rescheduled";
+}
+// Meetings
+allMeetingsResp = zoho.crm.getRecords("Events");
+// Find Meeting
+for each  meeting in allMeetingsResp
+{
+	tempId = meeting.getJSON("acuityscheduling1__AcuityID");
+	if(tempId == null)
+	{
+		continue;
+	}
+	if(tempId.toNumber() == appointmentId.toNumber())
+	{
+		moduleFound = "Events";
+		moduleId = meeting.getJson("id");
+		scheduleFound = true;
+		break;
+	}
+}
+// If no meeting or task found, exit 
+if(scheduleFound == false)
+{
+	if(debug)
+	{
+		sendmail
+		[
+			from :zoho.adminuserid
+			to :debugMail
+			subject :"No task or meeting found"
+			message :"No Task or Meeting Found with ID : " + appointmentId
+		]
+	}
+	return "Not Task or Meeting Found to Reschedule";
+}
+// Update Due date or timings
+// Finding new start time and end time 
+startTime = meetingDateTime.subString(0,19);
+requestObj.clear();
+requestObj.put("minutes",duration);
+requestObj.put("time",startTime);
+endTime = invokeurl
+[
+	url :"https://faas-blr1-8177d592.doserverless.co/api/v1/web/fn-0e938d59-984f-4e43-b133-7cc920485b22/default/add_minutes_to_time"
+	type :POST
+	parameters:requestObj
+	content-type:"application/x-www-form-urlencoded"
+];
+// Updating Record in Meeting
+newData = Map();
+newData.put("Start_DateTime",startTime);
+// yyyy-MM-ddTHH:mm:ss
+newData.put("End_DateTime",endTime);
+updateResp = zoho.crm.updateRecord(moduleFound,moduleId,newData);
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :debugMail
+		subject :"Updated record in meeting"
+		message :updateResp
+	]
+}
+return "Meeting Rescheduled";
