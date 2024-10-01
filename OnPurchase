@@ -1,0 +1,8 @@
+url = "https://creator.zoho.com/api/premanand12/json/extracut-plugins/form/extracut_users/record/add";
+logMap = Map();
+logMap.put("authtoken","6e763808a6a1637188f22862d4b198e7");
+logMap.put("scope","creatorapi");
+logMap.put("Installer_ID",zoho.loginuserid);
+logMap.put("Plugin","Acuity");
+logMap.put("Event","Purchase");
+Response = postUrl(url,logMap,false);
