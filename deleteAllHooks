@@ -1,0 +1,16 @@
+dynamic_map = Map();
+resp = zoho.crm.invokeConnector("acuityscheduling1.acuityscheduling.getwebhooks0",dynamic_map);
+info resp;
+responseJsonList = resp.getJSON("response").toJSONList();
+for each  response in responseJsonList
+{
+	targetURL = response.get("target");
+	if(targetURL.contains("platform.zoho"))
+	{
+		delMap = Map();
+		delMap.put("id",response.get("id"));
+		r = zoho.crm.invokeConnector("acuityscheduling1.acuityscheduling.deletehook",delMap);
+		info r;
+	}
+}
+return r;
