@@ -1,0 +1,227 @@
+// global variables
+crmContactOwnerEmail = zoho.loginuserid;
+plugin = "acuity_scheduling";
+function_new = "onScheduleNew";
+resp = crmAPIRequest.toMap();
+respBody = resp.get("body");
+// debugging email 
+debugMail = "ciddarth@xtracut.com";
+debug = true;
+// send response mail 
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :debugMail
+		subject :"Incoming Request from WebHook"
+		message :resp
+	]
+}
+// Getting appointment ID and Action type 
+paramsPairs = respBody.toList("&");
+id = "";
+actionType = "";
+for each  param in paramsPairs
+{
+	fieldsName = param.toList("=");
+	if(fieldsName.get(0) == "action")
+	{
+		actionType = fieldsName.get(1);
+	}
+	if(fieldsName.get(0) == "id")
+	{
+		id = fieldsName.get(1);
+	}
+}
+// Getting Module and Acitivity 
+moduleType = zoho.crm.getOrgVariable("acuityscheduling1__module");
+// Leads or Contacts
+activityType = zoho.crm.getOrgVariable("acuityscheduling1__activities");
+// Mobile or Phone
+contactType = zoho.crm.getOrgVariable("acuityscheduling1__phonemobile");
+// Meetings or Tasks
+// Get all details about appoinment
+requestObj = Map();
+requestObj.put("id",id);
+// Invoke Connector to get single appoinment details
+singleAppointmentResponse = zoho.crm.invokeConnector("acuityscheduling1.acuityscheduling.getsingleappointment",requestObj).toMap();
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :debugMail
+		subject :"Single Appoinment Response"
+		message :singleAppointmentResponse.get("response")
+	]
+}
+singleAppoinmentData = singleAppointmentResponse.get("response");
+email = singleAppoinmentData.get("email");
+firstName = singleAppoinmentData.get("firstName");
+lastName = singleAppoinmentData.get("lastName");
+phoneNumber = singleAppoinmentData.get("phone");
+appoinmentType = singleAppoinmentData.get("type");
+formsText = singleAppoinmentData.get("formsText");
+meetingDateTime = singleAppoinmentData.get("datetime");
+confirmationPage = singleAppoinmentData.get("confirmationPage");
+agentPage = "https://secure.acuityscheduling.com/appointments/view/" + id;
+appoinmentPrice = singleAppoinmentData.get("price");
+calendarName = singleAppoinmentData.get("calendar");
+// Check if the user is present in the given module
+userPresentFlag = false;
+getAllUsersResp = zoho.crm.getRecords(moduleType).toJsonList();
+for each  user in getAllUsersResp
+{
+	tempEmail = user.getJson("Email");
+	if(tempEmail == email)
+	{
+		userPresentFlag = true;
+		userId = user.getJson("id");
+		break;
+	}
+}
+// If not present create new user
+if(!userPresentFlag)
+{
+	// 	create user with first name, last name and email
+	newUser = Map();
+	newUser.put("First_Name",firstName);
+	newUser.put("Last_Name",lastName);
+	newUser.put("Email",email);
+	newUser.put(contactType,phoneNumber);
+	createEntity = zoho.crm.createRecord(moduleType,newUser);
+	// 	fetch id of newly created user 
+	allUserResp = zoho.crm.getRecords(moduleType).toJsonList();
+	for each  user in allUserResp
+	{
+		tempEmail = user.get("Email");
+		if(email == tempEmail)
+		{
+			userId = user.getJson("id");
+			break;
+		}
+	}
+}
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :debugMail
+		subject :"User ID"
+		message :userId
+	]
+}
+// Add Activity to the user
+newActivityRecord = Map();
+// Creating Title Text
+titleText = appoinmentType + " to " + firstName;
+// Creating new activity - Tasks or Meeting
+if(activityType == "Tasks")
+{
+	newActivityRecord.put("Subject",titleText);
+	newActivityRecord.put("Description",formsText);
+	newActivityRecord.put("Due_Date",meetingDateTime.subString(0,10));
+	newActivityRecord.put("acuityscheduling1__AcuityID",id);
+	// appointment id 
+	newActivityRecord.put("acuityscheduling1__Customer_URL",confirmationPage);
+	// appointment page
+	newActivityRecord.put("acuityscheduling1__Agent_URL",agentPage);
+	newActivityRecord.put("acuityscheduling1__Task_Price",appoinmentPrice);
+	// appointment price
+	newActivityRecord.put("acuityscheduling1__Calendar",calendarName);
+	// appoinment calendar name
+}
+else
+{
+	newActivityRecord.put("Event_Title",titleText);
+	newActivityRecord.put("Description",formsText);
+	newActivityRecord.put("acuityscheduling1__AcuityID",id);
+	// appointment id 
+	newActivityRecord.put("acuityscheduling1__ConfirmationPage",confirmationPage);
+	// appointment page
+	newActivityRecord.put("acuityscheduling1__AcuityURL",agentPage);
+	newActivityRecord.put("acuityscheduling1__Calendar_Name",calendarName);
+	// appoinment calendar name
+	newActivityRecord.put("acuityscheduling1__Event_Price",appoinmentPrice);
+	// appointment price
+	timeZone = singleAppoinmentData.get("timezone");
+	// timezone : redundent
+	duration = singleAppoinmentData.get("duration");
+	// duration
+	// 	Calculating Meeting start and end time 
+	startTime = singleAppoinmentData.get("datetime").subString(0,19);
+	requestParams = Map();
+	requestParams.put("time",startTime);
+	requestParams.put("minutes",duration);
+	// 	Digital Ocean Function that adds the given duration to the time 
+	endTime = invokeurl
+	[
+		url :"https://faas-blr1-8177d592.doserverless.co/api/v1/web/fn-0e938d59-984f-4e43-b133-7cc920485b22/default/add_minutes_to_time"
+		type :POST
+		parameters:requestParams
+		content-type:"application/x-www-form-urlencoded"
+	];
+	if(debug)
+	{
+		// Define the URL endpoint
+		// Create the payload as a map (dictionary in Deluge)
+		payload = Map();
+		payload.put("log_msg","End Time Response");
+		payload.put("StatusCode","201");
+		payload.put("user_mailid",crmContactOwnerEmail);
+		payload.put("Plugin",plugin);
+		payload.put("function",function_new);
+		// Send the request using postUrl() in Deluge
+		response = invokeurl
+		[
+			url :"https://xtracut-log-management-system.vercel.app/api/create/"
+			type :POST
+			parameters:payload
+			content-type:"application/x-www-form-urlencoded"
+		];
+	}
+	newActivityRecord.put("Start_DateTime",startTime);
+	newActivityRecord.put("End_DateTime",endTime);
+}
+// Setting id based on moduleType - Leads or Contacts 
+if(moduleType == "Leads")
+{
+	newActivityRecord.put("What_Id",userId);
+	newActivityRecord.put("$se_module",moduleType);
+}
+else
+{
+	newActivityRecord.put("Who_Id",userId);
+}
+// Creating Activity 
+createRecordResp = zoho.crm.createRecord(activityType,newActivityRecord);
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :debugMail
+		subject :"New Record Creation Response"
+		message :createRecordResp
+	]
+}
+// raising signal 
+signalMap = Map();
+signalMap.put("signal_namespace","acuityscheduling1.acuity");
+signalMap.put("email",email);
+signalMap.put("subject",titleText);
+signalMap.put("message",formsText);
+signalResult = zoho.crm.raiseSignal(signalMap);
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :debugMail
+		subject :"Signal Result"
+		message :signalResult
+	]
+}
+return "Hello world";
