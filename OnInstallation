@@ -1,0 +1,26 @@
+nameSpace = {"nameSpace":"premk.acuityscheduling1"};
+apiResponse = zoho.crm.invokeConnector("crm.zapikey",nameSpace);
+zApiKey = apiResponse.get("response");
+m = {"apiname":"acuityscheduling1__zkey","value":zApiKey};
+setZKey = zoho.crm.invokeConnector("crm.set",m);
+orgid = installParamMap.get("organizationId");
+installerid = installParamMap.get("installerId");
+isInstall = installParamMap.get("isInstall");
+pversion = installParamMap.get("previousVersion");
+sendmail
+[
+	from :zoho.adminuserid
+	to :"premk@xtracut.com"
+	subject :"Post Install script executed"
+	message :"Installation details ---> OrgId = " + orgid + " : Installer Id = " + installerid + " : is Install = " + isInstall + " : previous version = " + pversion
+]
+url = "https://creator.zoho.com/api/premanand12/json/extracut-plugins/form/extracut_users/record/add";
+logMap = Map();
+logMap.put("authtoken","6e763808a6a1637188f22862d4b198e7");
+logMap.put("scope","creatorapi");
+logMap.put("Organization_ID",orgid);
+logMap.put("Installer_ID",zoho.loginuserid);
+logMap.put("Is_Install",pversion);
+logMap.put("Plugin","Acuity");
+logMap.put("Event","Install");
+Response = postUrl(url,logMap,false);
