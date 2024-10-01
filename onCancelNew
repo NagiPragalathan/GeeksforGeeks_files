@@ -1,0 +1,90 @@
+resp = crmAPIRequest;
+respBody = resp.get("body");
+// Debugging
+debug = false;
+debugMail = "bhaarat@xtracut.com";
+// API request Mail
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :debugMail
+		subject :"Incoming Request from WebHook Reschedule"
+		message :resp
+	]
+}
+// Get ID and Action Type 
+paramsPairs = respBody.toList("&");
+appointmentId = "";
+actionType = "";
+for each  param in paramsPairs
+{
+	fieldsName = param.toList("=");
+	if(fieldsName.get(0) == "action")
+	{
+		actionType = fieldsName.get(1);
+	}
+	if(fieldsName.get(0) == "id")
+	{
+		appointmentId = fieldsName.get(1);
+	}
+}
+// Search Tasks
+allTasksResp = zoho.crm.getRecords("Tasks").toJsonList();
+moduleId = "";
+moduleType = "";
+scheduleFound = false;
+for each  task in allTasksResp
+{
+	tempId = task.getJson("acuityscheduling1__AcuityID");
+	if(tempId == null)
+	{
+		continue;
+	}
+	if(tempId.toNumber() == appointmentId.toNumber())
+	{
+		scheduleFound = true;
+		moduleId = task.getJson("id");
+		moduleType = "Tasks";
+		break;
+	}
+}
+if(!scheduleFound)
+{
+	allMeetingsResp = zoho.crm.getRecords("Events").toJsonList();
+	for each  meeting in allMeetingsResp
+	{
+		tempId = meeting.getJson("acuityscheduling1__AcuityID");
+		if(tempId == null)
+		{
+			continue;
+		}
+		if(tempId.toNumber() == appointmentId.toNumber())
+		{
+			scheduleFound = true;
+			moduleId = meeting.getJson("id");
+			moduleType = "Events";
+			break;
+		}
+	}
+}
+if(!scheduleFound)
+{
+	return "No Task or Meeting Found";
+}
+dataMap = Map();
+dataMap.put("module",moduleType);
+dataMap.put("id",moduleId);
+deleteResp = zoho.crm.invokeConnector("crm.delete",dataMap);
+if(debug)
+{
+	sendmail
+	[
+		from :zoho.adminuserid
+		to :debugMail
+		subject :"Delete Response"
+		message :deleteResp
+	]
+}
+return "";
